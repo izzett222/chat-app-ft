@@ -1,8 +1,7 @@
 import { SyntheticEvent, useEffect, useState } from "react";
 import { socket } from "../helpers/socket";
-import Message from "../components/Message";
 import useUsername from "../hooks/useUsername";
-import { Navigate, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { Dialog } from "@reach/dialog";
 import "@reach/dialog/styles.css";
 interface MessageI {
@@ -11,20 +10,23 @@ interface MessageI {
   sender: string;
 }
 export default function Chat() {
-  const [text, setText] = useState("");
   const [messages, setMessages] = useState<MessageI[]>([]);
   const [username] = useUsername();
   const [rooms, setRooms] = useState<string[]>([]);
-  const [room, setRoom] = useState<string>("");
+  const [hideRooms, setHideRooms] = useState<boolean>(false);
   const [showDialog, setShowDialog] = useState<boolean>(false);
   const [newRoom, setNewRoom] = useState<string>("");
-  const navigate = useNavigate();
   useEffect(() => {
     socket.auth = { username };
     socket.connect();
     socket.on("connect", () => {
       console.log("connected to server");
+      
     });
+    socket.on("messages", (data:MessageI[]) => {
+      console.log(data, '====================');
+      setMessages(data)
+  })
 
     return () => {
       socket.off("connect");
@@ -54,25 +56,16 @@ export default function Chat() {
     };
   }, [rooms]);
 
-
   const pickRoom = (room: string) => {
     socket.emit("join room", { room });
-    setRoom(room);
-  };
-  const handleSubmit = (e: SyntheticEvent) => {
-    e.preventDefault();
-    if (text.trim().length > 0) {
-      socket.emit("chat message", { message: text.trim() });
-      setText("");
-    }
+
   };
   const createRoom = (e: SyntheticEvent) => {
     e.preventDefault();
     if (newRoom.trim().length > 0) {
       socket.emit("create room", { newRoom });
-      setRoom(newRoom);
       setRooms([...rooms, newRoom]);
-      setText("");
+      setNewRoom("");
     }
   };
 
@@ -85,6 +78,7 @@ export default function Chat() {
   if (username === "") {
     return <Navigate to={"/"} />;
   }
+  const emojis = ["😀", "😃", "😄", "😁", "😆", "😅"];
   return (
     <div className="flex">
       <Dialog isOpen={showDialog} onDismiss={close}>
@@ -102,43 +96,51 @@ export default function Chat() {
           </button>
         </form>
       </Dialog>
-      <div className="w-80">
-        {rooms.map((el, i) => (
-          <button className="block" onClick={() => {pickRoom(el); navigate(el)}} key={i}>
-            {el}
-          </button>
-        ))}
-        <button onClick={open}>+ new room</button>
-      </div>
-      {/* {room !== "" && (
-        <div className="flex-1 w-full">
-          <h1 className="text-2xl text-center">{room}</h1>
-          <div className="max-w-2xl mx-auto h-[700px] mt-20 flex flex-col">
-            <div className="flex-1 flex flex-col justify-end pb-10 border border-gray-200">
-              {messages
-                .filter((el) => el.room === room)
-                .map((el, i) => (
-                  <Message message={el.message} index={i} key={i} />
-                ))}
+      <div
+        className={`min-w-[224px] ${
+          hideRooms ? "hidden" : "block"
+        } md:block pt-10 px-3 border-r-gray-200 border-r`}
+      >
+        <h2 className="ml-2 mb-1 font-medium text-slate-700">Rooms</h2>
+        <div className="flex flex-col gap-1">
+          {rooms.map((el, i) => (
+            <div key={i}>
+              <NavLink
+                to={`${el}`}
+                onClick={() => {
+                  pickRoom(el);
+                }}
+                className={({ isActive }) => `hidden rounded-sm md:flex gap-1 p-2 ${isActive ? "bg-slate-50" : ""}`}
+                
+              >
+                <span className="aspect-square rounded-sm w-12 flex justify-center items-center text-4xl bg-slate-200">
+                  {emojis[i % emojis.length]}
+                </span>{" "}
+                <span className="text-xl text-gray-700">{el}</span>
+              </NavLink>
+              <NavLink
+                to={`${el}`}
+                className={({ isActive }) => `flex gap-1 p-2 md:hidden ${isActive ? "bg-slate-50" : ""}`}
+                onClick={() => {
+                  setHideRooms(true);
+                  pickRoom(el);
+                }}
+              
+              >
+                <span className="aspect-square rounded-sm w-12 flex justify-center items-center text-4xl bg-slate-200">
+                  {emojis[i % emojis.length]}
+                </span>{" "}
+                <span className="text-xl text-gray-700">{el}</span>
+              </NavLink>
             </div>
-            <form action="" className="flex" onSubmit={handleSubmit}>
-              <input
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                type="text"
-                className="flex-1 border-b border-b-gray-200 border-l-gray-200 border-l outline-none"
-              />
-              <button type="submit" className="bg-yellow-200 p-5">
-                Send
-              </button>
-            </form>
-          </div>
+          ))}
         </div>
-      )} */}
-      <div className="flex-1 hidden md:block">
-        <Outlet context={{messages}} />
+
+        <button className="w-full bg-yellow-200 text-gray-700 py-2 rounded-md mt-2 text-lg" onClick={open}>New room</button>
       </div>
-      
+      <div className={`flex-1 ${hideRooms ? "block" : "hidden"} md:block`}>
+        <Outlet context={{ messages, openRooms: setHideRooms }} />
+      </div>
     </div>
   );
 }
